@@ -21,7 +21,12 @@ from src.prompts import (
     SYSTEM_PROMPT, CATEGORIZATION_PROMPT, GENERIC_INQUIRY_PROMPT,
     REFUND_REQUEST_PROMPT, ORDER_STATUS_PROMPT, POLICY_QUERY_PROMPT,
     COMPLAINT_HANDLING_PROMPT, GUARDRAILS_PROMPT, JUDGE_EVALUATION_PROMPT,
-    SAMPLE_ORDERS, SAMPLE_POLICIES
+    SAMPLE_ORDERS, SAMPLE_POLICIES,
+    TICKET_ZERO_SHOT_V1, TICKET_ZERO_SHOT_V2, TICKET_FEW_SHOT_SYSTEM,
+    TICKET_FEW_SHOT_EXAMPLES, SAMPLE_SUPPORT_TICKETS,
+    LEGAL_SUMMARIZATION_V1, LEGAL_SUMMARIZATION_V2,
+    LEGAL_JUDGE_SYSTEM, LEGAL_JUDGE_USER_TEMPLATE, SAMPLE_LEGAL_DOCS,
+    SAMPLE_LEGAL_DOC_REFERENCES,
 )
 
 # Page configuration
@@ -178,7 +183,7 @@ if not api_key:
     st.stop()
 
 # Main tabs
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "🏷️ Categorization",
     "💬 Generic Inquiry",
     "💰 Refund Request",
@@ -186,7 +191,9 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📋 Policy Query",
     "😟 Complaint Handling",
     "🛡️ Guardrails",
-    "⚖️ LLM-as-a-Judge"
+    "⚖️ LLM-as-a-Judge",
+    "🎫 Ticket Classification",
+    "📜 Legal Summarization",
 ])
 
 # ========================================
@@ -771,12 +778,250 @@ def evaluate_and_log_response(customer_msg, ai_response):
             else:
                 st.warning("Please enter a response to evaluate.")
 
+# ========================================
+# TAB 9: SUPPORT TICKET CLASSIFICATION (MLS 3 – Case Study 1)
+# ========================================
+with tab9:
+    st.header("🎫 Support Ticket Classification")
+    st.markdown("""
+    **From MLS 3 – Case Study 1: Support Ticket Classification Using LLMs**
+
+    LLMs can automatically classify incoming IT/enterprise support tickets into four standard ITSM categories.
+    This tab demonstrates how **Zero-Shot** and **Few-Shot** prompting compare in terms of accuracy and consistency.
+
+    **Categories:**
+    - **Incident** – Unexpected issue requiring immediate resolution
+    - **Request** – Routine inquiry or service request
+    - **Problem** – Recurring/systemic root-cause issue
+    - **Change** – Planned modification to configuration or subscription
+    """)
+
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        st.subheader("Ticket Message")
+
+        technique = st.radio(
+            "Prompting Technique:",
+            ["Zero-Shot (Naive)", "Zero-Shot (Refined)", "Few-Shot (4-shot)"],
+            help="Compare how adding context and examples improves classification"
+        )
+
+        selected_ticket = st.selectbox("Sample Tickets:", list(SAMPLE_SUPPORT_TICKETS.keys()))
+        ticket_msg = st.text_area("Ticket message:", value=SAMPLE_SUPPORT_TICKETS[selected_ticket], height=120)
+
+        # Build prompt messages based on selected technique
+        if technique == "Zero-Shot (Naive)":
+            prompt_messages = [{"role": "developer", "content": TICKET_ZERO_SHOT_V1}]
+            technique_note = "Simple category list, no role or detailed instructions."
+        elif technique == "Zero-Shot (Refined)":
+            prompt_messages = [{"role": "developer", "content": TICKET_ZERO_SHOT_V2}]
+            technique_note = "Adopts an enterprise role, adds sub-bullet examples per category, explicit output instruction."
+        else:
+            prompt_messages = [{"role": "developer", "content": TICKET_FEW_SHOT_SYSTEM}] + TICKET_FEW_SHOT_EXAMPLES
+            technique_note = "4-shot: one labeled example per category prepended to the prompt."
+
+        with st.expander("📋 View prompt structure sent to API"):
+            st.json(prompt_messages + [{"role": "user", "content": ticket_msg or "<ticket message>"}])
+
+        if st.button("🎫 Classify Ticket", type="primary", key="ticket_btn"):
+            if ticket_msg:
+                with st.spinner("Classifying..."):
+                    result = st.session_state.llm_service.classify_ticket(ticket_msg, prompt_messages)
+
+                    if result['success']:
+                        st.session_state.total_tokens += result['tokens_used']
+
+                        with col2:
+                            st.subheader("Classification Result")
+
+                            category = result["response"]
+                            color_map = {
+                                "Incident": "#ffebee",
+                                "Request": "#e8f5e9",
+                                "Problem": "#fff3e0",
+                                "Change": "#e3f2fd",
+                            }
+                            bg = color_map.get(category, "#f5f5f5")
+                            st.markdown(
+                                f'<div style="padding:1rem;border-radius:10px;background-color:{bg};font-size:1.4rem;font-weight:bold;">'
+                                f'🏷️ {category}</div>',
+                                unsafe_allow_html=True
+                            )
+
+                            st.info(f"Technique: **{technique}** | Tokens: {result['tokens_used']} | Time: {result['elapsed_time']:.2f}s")
+
+                            st.markdown(f"**💡 Technique note:** {technique_note}")
+
+                            st.markdown("**📊 Why Few-Shot Often Wins (from MLS 3 notebook):**")
+                            st.write("""
+                            | Technique | Typical F1-Score |
+                            |-----------|-----------------|
+                            | Zero-Shot Naive | ~0.40 |
+                            | Zero-Shot Refined | ~0.55 |
+                            | 1-Shot | ~0.70 |
+                            | 4-Shot | ~0.85 |
+                            | 8-Shot | ~0.83 |
+
+                            Adding examples dramatically improves accuracy, but beyond ~4–8 examples gains level off.
+                            """)
+                    else:
+                        with col2:
+                            st.error(f"Error: {result.get('error', 'Unknown error')}")
+            else:
+                st.warning("Please enter a ticket message.")
+
+# ========================================
+# TAB 10: LEGAL DOCUMENT SUMMARIZATION (MLS 3 – Case Study 2)
+# ========================================
+with tab10:
+    st.header("📜 Legal Document Summarization")
+    st.markdown("""
+    **From MLS 3 – Case Study 2: Summarization of Legal Documents**
+
+    LLMs can condense complex court judgments into concise, structured summaries — an **abstractive summarization** task.
+    This tab demonstrates:
+    1. How prompt refinement (basic vs expert system message) improves summary quality
+    2. **BERTScore** — semantic similarity between the AI summary and a gold reference (F1)
+    3. **LLM-as-a-Judge** — evaluates Completeness, Veracity, Structure, and Terminological Rigor
+    """)
+
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        st.subheader("Legal Document")
+
+        doc_choice = st.selectbox("Sample Legal Documents:", list(SAMPLE_LEGAL_DOCS.keys()))
+        legal_doc = st.text_area("Legal document text:", value=SAMPLE_LEGAL_DOCS[doc_choice].strip(), height=250)
+
+        prompt_version = st.radio(
+            "System Prompt Version:",
+            ["Basic (v1)", "Refined Legal Expert (v2)"],
+            help="v2 uses a structured expert role with explicit guidelines from MLS 3 notebook"
+        )
+
+        system_msg = LEGAL_SUMMARIZATION_V1 if prompt_version == "Basic (v1)" else LEGAL_SUMMARIZATION_V2
+
+        with st.expander("📋 View system prompt"):
+            st.code(system_msg.strip(), language="text")
+
+        run_bertscore = st.checkbox("Run BERTScore evaluation", value=True)
+        run_judge = st.checkbox("Run LLM-as-a-Judge evaluation", value=True)
+
+        if st.button("📜 Summarize Document", type="primary", key="legal_btn"):
+            if legal_doc:
+                with st.spinner("Generating summary..."):
+                    result = st.session_state.llm_service.summarize_legal_doc(legal_doc, system_msg)
+
+                if result['success']:
+                    st.session_state.total_tokens += result['tokens_used']
+                    summary_text = result["response"]
+
+                    with col2:
+                        st.subheader("Generated Summary")
+                        st.markdown(f'<div class="response-box">{summary_text}</div>', unsafe_allow_html=True)
+                        st.info(f"Tokens: {result['tokens_used']} | Time: {result['elapsed_time']:.2f}s")
+
+                        # ── BERTScore ──────────────────────────────────────
+                        if run_bertscore:
+                            st.markdown("---")
+                            st.subheader("📐 BERTScore Evaluation")
+                            reference = SAMPLE_LEGAL_DOC_REFERENCES.get(doc_choice, "")
+                            if reference:
+                                with st.spinner("Computing BERTScore (loading model first time may take ~30s)..."):
+                                    try:
+                                        from evaluate import load as eval_load
+                                        bertscore = eval_load("bertscore")
+                                        bs_results = bertscore.compute(
+                                            predictions=[summary_text],
+                                            references=[reference],
+                                            lang="en"
+                                        )
+                                        precision = bs_results["precision"][0]
+                                        recall = bs_results["recall"][0]
+                                        f1 = bs_results["f1"][0]
+
+                                        bc1, bc2, bc3 = st.columns(3)
+                                        bc1.metric("Precision", f"{precision:.3f}")
+                                        bc2.metric("Recall", f"{recall:.3f}")
+                                        bc3.metric("F1 Score", f"{f1:.3f}")
+
+                                        st.progress(float(f1))
+
+                                        st.markdown("**Reference (gold) summary:**")
+                                        st.caption(reference)
+
+                                        st.markdown("**💡 What BERTScore measures:**")
+                                        st.write("""
+                                        BERTScore computes token-level semantic similarity between the
+                                        generated summary and a gold reference using BERT embeddings.
+                                        F1 > 0.85 is generally considered high quality for legal summaries.
+                                        Refined prompts (v2) typically score higher than basic ones (v1).
+                                        """)
+                                    except Exception as e:
+                                        st.error(f"BERTScore error: {e}")
+                            else:
+                                st.info("No reference summary available for this document.")
+
+                        # ── LLM-as-a-Judge ─────────────────────────────────
+                        if run_judge:
+                            st.markdown("---")
+                            st.subheader("⚖️ LLM-as-a-Judge Evaluation")
+                            with st.spinner("Evaluating summary quality..."):
+                                judge_result = st.session_state.llm_service.judge_legal_summary(
+                                    legal_doc, summary_text,
+                                    LEGAL_JUDGE_SYSTEM, LEGAL_JUDGE_USER_TEMPLATE
+                                )
+
+                            if judge_result['success']:
+                                st.session_state.total_tokens += judge_result['tokens_used']
+                                import json as _json
+
+                                raw = judge_result["response"]
+                                try:
+                                    if "```json" in raw:
+                                        raw = raw[raw.find("```json") + 7: raw.rfind("```")].strip()
+                                    eval_data = _json.loads(raw)
+
+                                    metrics = ["completeness", "veracity", "structure", "terminological_rigor"]
+                                    for m in metrics:
+                                        if m in eval_data:
+                                            score = eval_data[m]["score"]
+                                            explanation = eval_data[m]["explanation"]
+                                            st.markdown(f"**{m.replace('_', ' ').title()}:** {score}/5")
+                                            st.caption(explanation)
+                                            st.progress(score / 5)
+
+                                    overall = eval_data.get("score", 0)
+                                    recommendation = eval_data.get("recommendation", "UNKNOWN")
+
+                                    st.markdown("---")
+                                    st.metric("Overall Score", f"{overall:.1f}/5.0")
+
+                                    if "APPROVE" in recommendation:
+                                        st.success(f"✅ {recommendation}")
+                                    elif "REVISE" in recommendation:
+                                        st.warning(f"⚠️ {recommendation}")
+                                    else:
+                                        st.error(f"❌ {recommendation}")
+
+                                except Exception:
+                                    st.markdown(f'<div class="response-box">{judge_result["response"]}</div>',
+                                                unsafe_allow_html=True)
+
+                                st.info(f"Judge tokens: {judge_result['tokens_used']}")
+                else:
+                    with col2:
+                        st.error(f"Error: {result.get('error', 'Unknown error')}")
+            else:
+                st.warning("Please enter a legal document.")
+
 # Footer
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 2rem;'>
     <strong>🛒 FreshCart AI Support Assistant</strong><br>
-    Built with Streamlit • Powered by OpenAI GPT-4<br>
-    <em>A demonstration of production-grade LLM applications for customer support automation</em>
+    Built with Streamlit • Powered by OpenAI GPT-4o-mini<br>
+    <em>FreshCart Support Automation • MLS 3: Ticket Classification & Legal Summarization</em>
 </div>
 """, unsafe_allow_html=True)

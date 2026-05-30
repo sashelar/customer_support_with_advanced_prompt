@@ -1,27 +1,38 @@
 """
-Advanced Prompt Engineering Demo - Week 2 Techniques
-Demonstrates: Few-Shot, Chain-of-Thought, Rephrase & Respond, Self-Consistency, LLM-as-a-Judge
+Customer Support Automation with LLM - Streamlit App
+A comprehensive demonstration of prompt engineering for customer support automation
 """
 
 import streamlit as st
 import sys
 import os
-from dotenv import load_dotenv
-import json
+from datetime import datetime
 
-# Load environment variables
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
 load_dotenv()
 
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.llm_service_enhanced import EnhancedLLMService
-from src.prompts_enhanced import *
+from src.llm_service import LLMService
+from src.prompts import (
+    SYSTEM_PROMPT, CATEGORIZATION_PROMPT, GENERIC_INQUIRY_PROMPT,
+    REFUND_REQUEST_PROMPT, ORDER_STATUS_PROMPT, POLICY_QUERY_PROMPT,
+    COMPLAINT_HANDLING_PROMPT, GUARDRAILS_PROMPT, JUDGE_EVALUATION_PROMPT,
+    SAMPLE_ORDERS, SAMPLE_POLICIES,
+    TICKET_ZERO_SHOT_V1, TICKET_ZERO_SHOT_V2, TICKET_FEW_SHOT_SYSTEM,
+    TICKET_FEW_SHOT_EXAMPLES, SAMPLE_SUPPORT_TICKETS,
+    LEGAL_SUMMARIZATION_V1, LEGAL_SUMMARIZATION_V2,
+    LEGAL_JUDGE_SYSTEM, LEGAL_JUDGE_USER_TEMPLATE, SAMPLE_LEGAL_DOCS,
+    SAMPLE_LEGAL_DOC_REFERENCES,
+)
 
 # Page configuration
 st.set_page_config(
-    page_title="Advanced Prompt Engineering - Week 2",
-    page_icon="🧠",
+    page_title="FreshCart AI Support Assistant",
+    page_icon="🛒",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -29,40 +40,66 @@ st.set_page_config(
 # Custom CSS
 st.markdown("""
 <style>
-    .technique-card {
-        padding: 1.5rem;
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #1E88E5;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    .sub-header {
+        font-size: 1.2rem;
+        color: #666;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .category-box {
+        padding: 1rem;
         border-radius: 10px;
-        border-left: 5px solid #FF6B6B;
-        background-color: #FFF5F5;
+        border-left: 5px solid #1E88E5;
+        background-color: #f0f8ff;
         margin: 1rem 0;
     }
-    .comparison-box {
-        padding: 1rem;
-        border-radius: 8px;
-        background-color: #F0F8FF;
-        margin: 0.5rem 0;
+    .response-box {
+        padding: 1.5rem;
+        border-radius: 10px;
+        background-color: #f5f5f5;
+        margin: 1rem 0;
     }
-    .json-output {
-        background-color: #2D2D2D;
-        color: #F8F8F2;
+    .safe-box {
         padding: 1rem;
-        border-radius: 8px;
-        font-family: 'Courier New', monospace;
-        overflow-x: auto;
+        border-radius: 10px;
+        border-left: 5px solid #4CAF50;
+        background-color: #e8f5e9;
+    }
+    .unsafe-box {
+        padding: 1rem;
+        border-radius: 10px;
+        border-left: 5px solid #f44336;
+        background-color: #ffebee;
+    }
+    .metric-card {
+        padding: 1rem;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        text-align: center;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # Initialize session state
-if 'enhanced_llm_service' not in st.session_state:
-    st.session_state.enhanced_llm_service = None
-if 'total_tokens_advanced' not in st.session_state:
-    st.session_state.total_tokens_advanced = 0
+if 'llm_service' not in st.session_state:
+    st.session_state.llm_service = None
+if 'conversation_history' not in st.session_state:
+    st.session_state.conversation_history = []
+if 'total_tokens' not in st.session_state:
+    st.session_state.total_tokens = 0
 
-# Sidebar
+# Sidebar - API Configuration & Educational Content
 with st.sidebar:
-    st.title("🧠 Advanced Techniques")
-    st.markdown("### Week 2: Prompt Engineering")
+    st.image("https://raw.githubusercontent.com/streamlit/streamlit/develop/docs/logo.svg", width=50)
+    st.title("🛒 FreshCart AI")
     st.markdown("---")
     
     # API Key from Environment
@@ -70,179 +107,427 @@ with st.sidebar:
     api_key = os.getenv("OPENAI_API_KEY")
     
     if api_key:
-        if st.session_state.enhanced_llm_service is None:
-            st.session_state.enhanced_llm_service = EnhancedLLMService(api_key=api_key)
+        if st.session_state.llm_service is None:
+            st.session_state.llm_service = LLMService(api_key=api_key)
             st.success("✅ Connected to OpenAI!")
     else:
-        st.error("❌ OPENAI_API_KEY not found")
-        st.info("Set: $env:OPENAI_API_KEY = 'sk-...'")
+        st.error("❌ OPENAI_API_KEY not found in environment variables")
+        st.info("Set it with: $env:OPENAI_API_KEY = 'sk-...'")
     
     st.markdown("---")
     
-    # Learning Objectives
+    # Educational Content
     st.subheader("📚 Learning Objectives")
-    with st.expander("Week 2 Techniques"):
+    with st.expander("🎯 Case Study Overview"):
         st.markdown("""
-        1. **Few-Shot Learning**
-           - Show examples, not just instructions
-           - Format specification
-           
-        2. **Chain-of-Thought (CoT)**
-           - Step-by-step reasoning
-           - Explainable outputs
-           
-        3. **Two-Stage CoT**
-           - Break complex tasks
-           - Analysis → Recommendations
-           
-        4. **Self-Consistency**
-           - Generate multiple answers
-           - Select most consistent
-           
-        5. **Rephrase & Respond**
-           - Clarify ambiguous questions
-           - Better understanding
-           
-        6. **LLM-as-a-Judge**
-           - Automated evaluation
-           - Multi-dimensional scoring
+        **Context:** Online Food & Grocery Delivery Platform
+        
+        **Key Focus Areas:**
+        1. Request Categorization
+        2. Generic Inquiry Handling
+        3. Refund Request Processing
+        4. Order Status Management
+        5. Policy Explanations
+        6. Complaint Resolution
+        7. Response Safety (Guardrails)
+        8. Quality Evaluation (LLM-as-a-Judge)
+        """)
+    
+    with st.expander("🏭 Industry Best Practices"):
+        st.markdown("""
+        **Real-World Considerations:**
+        
+        1. **Latency Matters**: Sub-2-second responses
+        2. **Cost Optimization**: Use smaller models when possible
+        3. **Guardrails are Critical**: Always validate outputs
+        4. **Monitoring**: Track response quality continuously
+        5. **Fallback Mechanisms**: Human escalation paths
+        6. **Context Management**: Keep conversation history
+        7. **A/B Testing**: Test prompts before deployment
+        8. **Compliance**: GDPR, data privacy, PII handling
+        """)
+    
+    with st.expander("💡 Prompt Engineering Tips"):
+        st.markdown("""
+        - **Be Specific**: Clear instructions → better outputs
+        - **Few-Shot Learning**: Provide examples
+        - **Temperature Control**: Lower for factual, higher for creative
+        - **Structured Output**: Request specific formats
+        - **Chain-of-Thought**: Break complex tasks into steps
+        - **Iterative Refinement**: Test and improve prompts
         """)
     
     st.markdown("---")
     
     # Statistics
-    if st.session_state.enhanced_llm_service:
-        stats = st.session_state.enhanced_llm_service.get_stats()
-        st.subheader("📊 Session Stats")
+    if st.session_state.llm_service:
+        stats = st.session_state.llm_service.get_stats()
+        st.subheader("📊 Session Statistics")
         st.metric("API Calls", stats['total_calls'])
-        st.metric("Total Tokens", st.session_state.total_tokens_advanced)
+        st.metric("Total Tokens", st.session_state.total_tokens)
         st.metric("Model", stats['model'])
 
 # Main Content
-st.markdown("# 🧠 Advanced Prompt Engineering Techniques")
-st.markdown("### Based on Week 2: Prompt Engineering Fundamentals")
+st.markdown('<div class="main-header">🛒 FreshCart AI Support Assistant</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Intelligent Customer Support Automation with LLM</div>', unsafe_allow_html=True)
 
-# Check API key
+# Check if API key is configured
 if not api_key:
-    st.error("⚠️ OPENAI_API_KEY not found in environment")
-    st.info("Set it with: `$env:OPENAI_API_KEY = 'sk-your-key'`")
+    st.error("⚠️ OPENAI_API_KEY not found in environment variables")
+    st.info("""
+    **Setup Required:**
+    1. Set environment variable: `$env:OPENAI_API_KEY = "sk-your-key"`
+    2. Or create a .env file with: `OPENAI_API_KEY=sk-your-key`
+    3. Restart the app
+    """)
     st.stop()
 
 # Main tabs
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "🎯 Few-Shot Learning",
-    "🧵 Chain-of-Thought",
-    "🔄 Two-Stage CoT",
-    "✅ Self-Consistency",
-    "📝 Rephrase & Respond",
-    "⚖️ LLM-as-a-Judge"
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+    "🏷️ Categorization",
+    "💬 Generic Inquiry",
+    "💰 Refund Request",
+    "📦 Order Status",
+    "📋 Policy Query",
+    "😟 Complaint Handling",
+    "🛡️ Guardrails",
+    "⚖️ LLM-as-a-Judge",
+    "🎫 Ticket Classification",
+    "📜 Legal Summarization",
 ])
 
 # ========================================
-# TAB 1: FEW-SHOT LEARNING
+# TAB 1: CATEGORIZATION
 # ========================================
 with tab1:
-    st.header("🎯 Few-Shot Learning")
+    st.header("🏷️ Request Categorization")
     st.markdown("""
-    **Concept:** Show the model examples of input-output pairs to specify the expected format.
+    **Purpose:** Automatically categorize incoming support requests to route them to the right handler.
     
-    **Key Insight:** The model doesn't "learn" from example content - it learns the *format*.
-    This is why we can even swap labels in examples and still get correct outputs!
-    
-    **Use Case:** When you need consistent structured output (JSON, specific formats)
+    **Why it matters:** In production, this is the first step. Proper categorization enables:
+    - Faster routing to specialized teams
+    - Priority queue management
+    - SLA tracking by category
+    - Better analytics and insights
     """)
     
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        st.subheader("Input")
-        
-        approach = st.radio(
-            "Select Approach:",
-            ["Few-Shot (with examples)", "Zero-Shot (no examples)"],
-            help="Compare few-shot vs zero-shot"
-        )
+        st.subheader("Customer Message")
         
         sample_messages = [
             "Custom message...",
-            "This is the third time my order has been wrong!",
-            "I received spoiled milk. I want a refund.",
-            "How do I change my delivery address?",
-            "What's your policy on returns?"
+            "My order hasn't arrived yet and it's been 3 hours!",
+            "I received rotten tomatoes in my order. I want my money back.",
+            "How do I add a new delivery address to my account?",
+            "What's your policy on returning fresh produce?",
+            "This is unacceptable! My groceries were left outside in the rain!"
         ]
         
-        selected_msg = st.selectbox("Sample Messages:", sample_messages)
+        selected_sample = st.selectbox("Sample Messages:", sample_messages)
         
-        if selected_msg == "Custom message...":
-            customer_msg = st.text_area("Enter message:", height=100)
+        if selected_sample == "Custom message...":
+            customer_msg = st.text_area("Enter customer message:", height=150)
         else:
-            customer_msg = st.text_area("Enter message:", value=selected_msg, height=100)
+            customer_msg = st.text_area("Enter customer message:", value=selected_sample, height=150)
         
-        # Show what will be sent to API
-        with st.expander("📋 Click to view prompt structure"):
-            if approach == "Few-Shot (with examples)":
-                prompt_messages = [{"role": "developer", "content": FEW_SHOT_CATEGORIZATION_SYSTEM}]
-                prompt_messages.extend(FEW_SHOT_CATEGORIZATION_EXAMPLES)
-                prompt_messages.append({"role": "user", "content": customer_msg if customer_msg else "<your message here>"})
-            else:
-                prompt_messages = [
-                    {"role": "developer", "content": FEW_SHOT_CATEGORIZATION_SYSTEM},
-                    {"role": "user", "content": customer_msg if customer_msg else "<your message here>"}
-                ]
-            
-            st.json(prompt_messages)
-            st.caption(f"Total messages in prompt: {len(prompt_messages)}")
-        
-        if st.button("🎯 Categorize", type="primary", key="fewshot_btn"):
+        if st.button("🔍 Categorize Request", type="primary"):
             if customer_msg:
-                with st.spinner("Categorizing..."):
-                    if approach == "Few-Shot (with examples)":
-                        result = st.session_state.enhanced_llm_service.few_shot_categorize(
-                            customer_msg,
-                            FEW_SHOT_CATEGORIZATION_SYSTEM,
-                            FEW_SHOT_CATEGORIZATION_EXAMPLES
-                        )
-                    else:
-                        result = st.session_state.enhanced_llm_service.zero_shot_categorize(
-                            customer_msg,
-                            FEW_SHOT_CATEGORIZATION_SYSTEM
-                        )
+                with st.spinner("Analyzing request..."):
+                    result = st.session_state.llm_service.categorize_request(
+                        customer_msg,
+                        CATEGORIZATION_PROMPT
+                    )
                     
                     if result['success']:
-                        st.session_state.total_tokens_advanced += result['tokens_used']
+                        st.session_state.total_tokens += result['tokens_used']
                         
                         with col2:
-                            st.subheader("Result")
-                            st.markdown(f'<div class="technique-card">{result["response"]}</div>', 
+                            st.subheader("Categorization Result")
+                            st.markdown(f'<div class="category-box">{result["response"]}</div>', 
+                                      unsafe_allow_html=True)
+                            
+                            st.info(f"""
+                            **Model:** {result['model']}  
+                            **Tokens Used:** {result['tokens_used']}  
+                            **Response Time:** {result['elapsed_time']:.2f}s
+                            """)
+                            
+                            st.markdown("**💡 Production Insight:**")
+                            st.write("""
+                            In a real system, this category would trigger:
+                            - Routing to specialized queues
+                            - SLA timer starts
+                            - Relevant context loading
+                            - Priority scoring
+                            """)
+            else:
+                st.warning("Please enter a customer message.")
+
+# ========================================
+# TAB 2: GENERIC INQUIRY
+# ========================================
+with tab2:
+    st.header("💬 Generic Inquiry Handling")
+    st.markdown("""
+    **Purpose:** Handle general questions about the service, account, or platform features.
+    
+    **Industry Application:** These represent 40-50% of support tickets. Automation here provides:
+    - 24/7 instant responses
+    - Consistent information delivery
+    - Reduced load on human agents
+    - Multilingual support capability
+    """)
+    
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.subheader("Customer Inquiry")
+        
+        inquiry_samples = [
+            "Custom inquiry...",
+            "How do I change my delivery time preference?",
+            "Do you deliver to my area? My zip code is 12345.",
+            "What payment methods do you accept?",
+            "How do I become a premium member?"
+        ]
+        
+        selected_inquiry = st.selectbox("Sample Inquiries:", inquiry_samples)
+        
+        if selected_inquiry == "Custom inquiry...":
+            inquiry_msg = st.text_area("Enter inquiry:", height=100)
+        else:
+            inquiry_msg = st.text_area("Enter inquiry:", value=selected_inquiry, height=100)
+        
+        if st.button("💬 Generate Response", type="primary", key="inquiry_btn"):
+            if inquiry_msg:
+                with st.spinner("Generating response..."):
+                    result = st.session_state.llm_service.handle_inquiry(
+                        inquiry_msg,
+                        GENERIC_INQUIRY_PROMPT,
+                        SYSTEM_PROMPT
+                    )
+                    
+                    if result['success']:
+                        st.session_state.total_tokens += result['tokens_used']
+                        
+                        with col2:
+                            st.subheader("AI Response")
+                            st.markdown(f'<div class="response-box">{result["response"]}</div>',
+                                      unsafe_allow_html=True)
+                            
+                            st.info(f"Tokens: {result['tokens_used']} | Time: {result['elapsed_time']:.2f}s")
+            else:
+                st.warning("Please enter an inquiry.")
+
+# ========================================
+# TAB 3: REFUND REQUEST
+# ========================================
+with tab3:
+    st.header("💰 Refund Request Handling")
+    st.markdown("""
+    **Purpose:** Process refund requests with policy compliance and empathy.
+    
+    **Critical in Production:** Refunds involve money - mistakes are costly. This system:
+    - Ensures policy compliance
+    - Maintains consistent decision-making
+    - Reduces disputes and chargebacks
+    - Tracks refund patterns for quality improvement
+    """)
+    
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.subheader("Refund Request Details")
+        
+        refund_samples = [
+            "Custom request...",
+            "Half the vegetables in my order were spoiled. I want a full refund!",
+            "I'm missing 2 items from my order - the milk and bread.",
+            "The delivery was 45 minutes late and my ice cream melted."
+        ]
+        
+        selected_refund = st.selectbox("Sample Requests:", refund_samples)
+        
+        if selected_refund == "Custom request...":
+            refund_msg = st.text_area("Customer message:", height=100)
+        else:
+            refund_msg = st.text_area("Customer message:", value=selected_refund, height=100)
+        
+        order_id = st.selectbox("Order ID:", list(SAMPLE_ORDERS.keys()))
+        order_details = SAMPLE_ORDERS[order_id]
+        
+        st.json(order_details)
+        
+        if st.button("💰 Process Refund Request", type="primary", key="refund_btn"):
+            if refund_msg:
+                with st.spinner("Processing refund request..."):
+                    result = st.session_state.llm_service.handle_refund(
+                        refund_msg,
+                        str(order_details),
+                        REFUND_REQUEST_PROMPT,
+                        SYSTEM_PROMPT
+                    )
+                    
+                    if result['success']:
+                        st.session_state.total_tokens += result['tokens_used']
+                        
+                        with col2:
+                            st.subheader("AI Response")
+                            st.markdown(f'<div class="response-box">{result["response"]}</div>',
                                       unsafe_allow_html=True)
                             
                             st.info(f"Tokens: {result['tokens_used']} | Time: {result['elapsed_time']:.2f}s")
                             
-                            st.markdown("**💡 Key Takeaway:**")
-                            if approach == "Few-Shot (with examples)":
-                                st.write("""
-                                Few-shot prompting provides 3 examples showing the exact JSON format expected.
-                                The model learns the structure, not the content!
-                                """)
-                            else:
-                                st.write("""
-                                Zero-shot relies only on instructions in the system message.
-                                May be less consistent with complex output formats.
-                                """)
+                            st.markdown("**💡 Production Consideration:**")
+                            st.write("""
+                            In production, this would:
+                            - Trigger automated refund in payment system
+                            - Send confirmation email
+                            - Log for fraud detection
+                            - Update customer satisfaction scores
+                            """)
             else:
-                st.warning("Please enter a message")
+                st.warning("Please enter a refund request.")
 
 # ========================================
-# TAB 2: CHAIN-OF-THOUGHT
+# TAB 4: ORDER STATUS
 # ========================================
-with tab2:
-    st.header("🧵 Chain-of-Thought (CoT)")
+with tab4:
+    st.header("📦 Order Status Queries")
     st.markdown("""
-    **Concept:** Ask the model to explain its reasoning step-by-step before giving the final answer.
+    **Purpose:** Provide real-time order updates and manage delivery expectations.
     
-    **Why it works:** Breaking down complex tasks into steps improves accuracy and makes outputs explainable.
+    **Value in Production:** Order tracking queries are high-volume, low-complexity:
+    - Perfect for automation (95%+ accuracy possible)
+    - Reduces "where is my order?" calls dramatically
+    - Proactive communication reduces anxiety
+    - Integration with logistics systems for real-time data
+    """)
     
-    **Key phrase:** "Take a step-by-step approach" or "Explain your reasoning"
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.subheader("Order Status Query")
+        
+        status_samples = [
+            "Custom query...",
+            "Where is my order? It's been 2 hours!",
+            "When will my order arrive? Order ID: ORD456",
+            "My order status shows 'Delayed'. What does that mean?"
+        ]
+        
+        selected_status = st.selectbox("Sample Queries:", status_samples)
+        
+        if selected_status == "Custom query...":
+            status_msg = st.text_area("Customer query:", height=100)
+        else:
+            status_msg = st.text_area("Customer query:", value=selected_status, height=100)
+        
+        order_id_status = st.selectbox("Order ID:", list(SAMPLE_ORDERS.keys()), key="status_order")
+        order_info = SAMPLE_ORDERS[order_id_status]
+        
+        st.json(order_info)
+        
+        if st.button("📦 Check Order Status", type="primary", key="status_btn"):
+            if status_msg:
+                with st.spinner("Checking order status..."):
+                    result = st.session_state.llm_service.handle_order_status(
+                        status_msg,
+                        str(order_info),
+                        ORDER_STATUS_PROMPT,
+                        SYSTEM_PROMPT
+                    )
+                    
+                    if result['success']:
+                        st.session_state.total_tokens += result['tokens_used']
+                        
+                        with col2:
+                            st.subheader("AI Response")
+                            st.markdown(f'<div class="response-box">{result["response"]}</div>',
+                                      unsafe_allow_html=True)
+                            
+                            st.info(f"Tokens: {result['tokens_used']} | Time: {result['elapsed_time']:.2f}s")
+            else:
+                st.warning("Please enter a query.")
+
+# ========================================
+# TAB 5: POLICY QUERY
+# ========================================
+with tab5:
+    st.header("📋 Policy-Related Queries")
+    st.markdown("""
+    **Purpose:** Explain company policies clearly and consistently.
+    
+    **Why LLMs Excel Here:**
+    - Can explain complex policies in simple terms
+    - Adapts explanation to user's question
+    - Maintains consistency across all agents
+    - Reduces misunderstandings and disputes
+    """)
+    
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.subheader("Policy Question")
+        
+        policy_samples = [
+            "Custom question...",
+            "What's your refund policy if I receive damaged items?",
+            "How does your delivery guarantee work?",
+            "Can I return fresh produce if I don't like the quality?"
+        ]
+        
+        selected_policy_q = st.selectbox("Sample Questions:", policy_samples)
+        
+        if selected_policy_q == "Custom question...":
+            policy_msg = st.text_area("Customer question:", height=100)
+        else:
+            policy_msg = st.text_area("Customer question:", value=selected_policy_q, height=100)
+        
+        policy_type = st.selectbox("Related Policy:", list(SAMPLE_POLICIES.keys()))
+        policy_context = SAMPLE_POLICIES[policy_type]
+        
+        st.text_area("Policy Context:", value=policy_context, height=100, disabled=True)
+        
+        if st.button("📋 Explain Policy", type="primary", key="policy_btn"):
+            if policy_msg:
+                with st.spinner("Generating explanation..."):
+                    result = st.session_state.llm_service.handle_policy(
+                        policy_msg,
+                        policy_context,
+                        POLICY_QUERY_PROMPT,
+                        SYSTEM_PROMPT
+                    )
+                    
+                    if result['success']:
+                        st.session_state.total_tokens += result['tokens_used']
+                        
+                        with col2:
+                            st.subheader("AI Response")
+                            st.markdown(f'<div class="response-box">{result["response"]}</div>',
+                                      unsafe_allow_html=True)
+                            
+                            st.info(f"Tokens: {result['tokens_used']} | Time: {result['elapsed_time']:.2f}s")
+            else:
+                st.warning("Please enter a question.")
+
+# ========================================
+# TAB 6: COMPLAINT HANDLING
+# ========================================
+with tab6:
+    st.header("😟 Complaint Handling")
+    st.markdown("""
+    **Purpose:** De-escalate complaints with empathy and concrete solutions.
+    
+    **Critical Success Factors:**
+    - Acknowledge feelings first (empathy)
+    - Take responsibility (no defensiveness)
+    - Provide specific solutions
+    - Prevent escalation to social media/reviews
+    
+    **Industry Stat:** A well-handled complaint increases loyalty more than if the problem never occurred!
     """)
     
     col1, col2 = st.columns([1, 1])
@@ -250,342 +535,171 @@ with tab2:
     with col1:
         st.subheader("Customer Complaint")
         
-        cot_samples = [
+        complaint_samples = [
             "Custom complaint...",
-            "My order #12345 arrived 2 hours late. The ice cream melted ($15), and 3 items were missing (milk $5, bread $4, eggs $6). I had to order from another store which cost me $20 delivery. I explicitly need a refund!",
-            "Received order ORD789. Half the vegetables are rotten. Spent $45 total, wasted $22 on bad produce. Want my money back ASAP!",
+            "This is the third time my order has been wrong! Your service is terrible!",
+            "I'm extremely disappointed. The driver left my groceries outside without ringing the bell.",
+            "Your app keeps crashing and I missed my delivery window because of it!"
         ]
         
-        selected_complaint = st.selectbox("Sample Complaints:", cot_samples)
+        selected_complaint = st.selectbox("Sample Complaints:", complaint_samples)
         
         if selected_complaint == "Custom complaint...":
-            complaint = st.text_area("Enter complaint:", height=150)
+            complaint_msg = st.text_area("Customer complaint:", height=100)
         else:
-            complaint = st.text_area("Enter complaint:", value=selected_complaint, height=150)
+            complaint_msg = st.text_area("Customer complaint:", value=selected_complaint, height=100)
         
-        # Show what will be sent to API
-        with st.expander("📋 Click to view prompt structure"):
-            prompt_messages = [
-                {"role": "developer", "content": ENTITY_EXTRACTION_COT_SYSTEM},
-                {"role": "user", "content": complaint if complaint else "<your complaint here>"}
-            ]
-            st.json(prompt_messages)
-            st.caption(f"Total messages: {len(prompt_messages)} | Note: CoT asks for step-by-step reasoning in system message")
+        issue_type = st.selectbox(
+            "Issue Type:",
+            ["Quality Issue", "Delivery Problem", "App/Technical Issue", "Customer Service Issue", "Repeat Problem"]
+        )
         
-        if st.button("🧵 Analyze with CoT", type="primary", key="cot_btn"):
-            if complaint:
-                with st.spinner("Analyzing step-by-step..."):
-                    result = st.session_state.enhanced_llm_service.cot_entity_extraction(
-                        complaint,
-                        ENTITY_EXTRACTION_COT_SYSTEM
+        if st.button("😟 Handle Complaint", type="primary", key="complaint_btn"):
+            if complaint_msg:
+                with st.spinner("Crafting empathetic response..."):
+                    result = st.session_state.llm_service.handle_complaint(
+                        complaint_msg,
+                        issue_type,
+                        COMPLAINT_HANDLING_PROMPT,
+                        SYSTEM_PROMPT
                     )
                     
                     if result['success']:
-                        st.session_state.total_tokens_advanced += result['tokens_used']
+                        st.session_state.total_tokens += result['tokens_used']
                         
                         with col2:
-                            st.subheader("Analysis")
-                            st.markdown(f'<div class="technique-card">{result["response"]}</div>',
+                            st.subheader("AI Response")
+                            st.markdown(f'<div class="response-box">{result["response"]}</div>',
                                       unsafe_allow_html=True)
                             
                             st.info(f"Tokens: {result['tokens_used']} | Time: {result['elapsed_time']:.2f}s")
                             
-                            st.markdown("**💡 What Happened:**")
+                            st.markdown("**💡 What Makes This Work:**")
                             st.write("""
-                            The model:
-                            1. Broke down the task into steps
-                            2. Explained its reasoning for each extraction
-                            3. Provided the final structured JSON
-                            
-                            This makes the output explainable and verifiable!
+                            - **Acknowledges emotion** ("I understand your frustration")
+                            - **Takes responsibility** (no excuses)
+                            - **Specific solution** (not vague promises)
+                            - **Compensation** (when appropriate)
+                            - **Prevention assurance** (we're fixing this)
                             """)
             else:
-                st.warning("Please enter a complaint")
+                st.warning("Please enter a complaint.")
 
 # ========================================
-# TAB 3: TWO-STAGE CoT
+# TAB 7: GUARDRAILS
 # ========================================
-with tab3:
-    st.header("🔄 Two-Stage Chain-of-Thought")
+with tab7:
+    st.header("🛡️ Guardrails - Safety & Compliance")
     st.markdown("""
-    **Concept:** Break complex tasks into two stages:
-    1. **Stage 1:** Analyze the input (extract information, identify themes)
-    2. **Stage 2:** Generate recommendations based on Stage 1 output
+    **Purpose:** Ensure all AI responses are safe, compliant, and appropriate before showing to customers.
     
-    **Why it's powerful:** Each stage focuses on one clear task, improving quality.
+    **Critical in Production:** NEVER send LLM output directly to customers without validation!
+    
+    **What We Check:**
+    1. **Toxic Language**: Rude, offensive, or unprofessional content
+    2. **PII Exposure**: Accidental disclosure of personal information
+    3. **Policy Violations**: Promises outside company policy
+    4. **Discriminatory Content**: Biased or discriminatory language
+    5. **Unsafe Advice**: Harmful recommendations
+    
+    **Real-World Impact:** One unfiltered bad response can damage brand reputation and cause legal issues.
     """)
     
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        st.subheader("Customer Feedback")
+        st.subheader("Response to Check")
         
-        feedback = st.text_area(
-            "Enter feedback:",
-            value="The delivery was 2 hours late. Driver didn't call. Ice cream melted, vegetables wilted. Spent $60, half was wasted. Customer service was unhelpful. This is my third bad experience. Considering switching to competitors.",
-            height=150
-        )
-        
-        # Show what will be sent to API
-        with st.expander("📋 Click to view Stage 1 prompt"):
-            stage1_messages = [
-                {"role": "developer", "content": COT_STAGE1_ANALYSIS_SYSTEM},
-                {"role": "user", "content": feedback}
-            ]
-            st.json(stage1_messages)
-            st.caption("Stage 1: Analysis phase")
-        
-        with st.expander("📋 Stage 2 prompt (generated after Stage 1)"):
-            st.info("Stage 2 prompt will include the output from Stage 1 as context")
-            st.code("""
-# Example Stage 2 structure:
-{
-  "role": "developer",
-  "content": "Generate recommendations system message..."
-},
-{
-  "role": "user", 
-  "content": "Analysis from Stage 1: <stage1_output>"
-}
-            """)
-        
-        if st.button("🔄 Two-Stage Analysis", type="primary", key="twostage_btn"):
-            if feedback:
-                with st.spinner("Stage 1: Analyzing feedback..."):
-                    result = st.session_state.enhanced_llm_service.two_stage_cot(
-                        feedback,
-                        COT_STAGE1_ANALYSIS_SYSTEM,
-                        COT_STAGE2_RECOMMENDATIONS_SYSTEM
-                    )
-                    
-                    if result['success']:
-                        st.session_state.total_tokens_advanced += result['total_tokens']
-                        
-                        with col2:
-                            st.subheader("Results")
-                            
-                            st.markdown("**Stage 1: Analysis**")
-                            st.markdown(f'<div class="comparison-box">{result["stage1_analysis"]}</div>',
-                                      unsafe_allow_html=True)
-                            
-                            st.markdown("**Stage 2: Recommendations**")
-                            st.markdown(f'<div class="comparison-box">{result["stage2_recommendations"]}</div>',
-                                      unsafe_allow_html=True)
-                            
-                            st.info(f"Total Tokens: {result['total_tokens']} | Total Time: {result['total_time']:.2f}s")
-                            
-                            st.markdown("**💡 Benefits:**")
-                            st.write("""
-                            - Stage 1 focuses purely on understanding
-                            - Stage 2 uses that understanding for actionable insights
-                            - Each stage is simpler than doing both at once
-                            - Better quality overall
-                            """)
-            else:
-                st.warning("Please enter feedback")
-
-# ========================================
-# TAB 4: SELF-CONSISTENCY
-# ========================================
-with tab4:
-    st.header("✅ Self-Consistency")
-    st.markdown("""
-    **Concept:** Generate multiple answers to the same question, then select the most consistent one.
-    
-    **Why it works:** For factual questions, the correct answer often appears most frequently across multiple attempts.
-    
-    **Use Case:** Important factual queries where accuracy is critical.
-    """)
-    
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        st.subheader("Factual Question")
-        
-        question = st.text_area(
-            "Enter question:",
-            value="What was FreshCart's total revenue increase in 2023?",
-            height=100
-        )
-        
-        num_gen = st.slider("Number of generations:", 2, 5, 3)
-        
-        # Show what will be sent to API
-        with st.expander("📋 Click to view Generation prompt (Stage 1)"):
-            gen_system = SELF_CONSISTENCY_GENERATION_SYSTEM.format(context=FRESHCART_CONTEXT)
-            gen_messages = [
-                {"role": "developer", "content": gen_system},
-                {"role": "user", "content": question if question else "<your question>"}
-            ]
-            st.json(gen_messages)
-            st.caption(f"This will be sent {num_gen} times with temperature=0.7 for diversity")
-        
-        with st.expander("📋 Click to view Selection prompt (Stage 2)"):
-            st.info("After generating multiple answers, this prompt selects the best one")
-            st.code("""
-# Selection prompt structure:
-{
-  "role": "developer",
-  "content": "Choose the most accurate answer..."
-},
-{
-  "role": "user",
-  "content": "Question: <question>\\n\\nGenerated Answers:\\n1. ...\\n2. ...\\n3. ..."
-}
-            """)
-        
-        if st.button("✅ Generate & Select", type="primary", key="consistency_btn"):
-            if question:
-                with st.spinner(f"Generating {num_gen} answers..."):
-                    result = st.session_state.enhanced_llm_service.self_consistency(
-                        question,
-                        FRESHCART_CONTEXT,
-                        SELF_CONSISTENCY_GENERATION_SYSTEM,
-                        SELF_CONSISTENCY_SELECTION_SYSTEM,
-                        num_generations=num_gen
-                    )
-                    
-                    if result['success']:
-                        st.session_state.total_tokens_advanced += result['total_tokens']
-                        
-                        with col2:
-                            st.subheader("Results")
-                            
-                            st.markdown(f"**Generated {num_gen} Answers:**")
-                            for i, ans in enumerate(result['generated_answers'], 1):
-                                st.markdown(f'<div class="comparison-box"><strong>Answer {i}:</strong><br>{ans}</div>',
-                                          unsafe_allow_html=True)
-                            
-                            st.markdown("**Final Selected Answer:**")
-                            st.markdown(f'<div class="technique-card">{result["selected_answer"]}</div>',
-                                      unsafe_allow_html=True)
-                            
-                            st.info(f"Total Tokens: {result['total_tokens']}")
-                            
-                            st.markdown("**💡 How it Works:**")
-                            st.write("""
-                            1. Generate multiple diverse answers (temp=0.7)
-                            2. Analyze for consistency and accuracy
-                            3. Select the most reliable answer (temp=0)
-                            
-                            This reduces hallucinations for factual queries!
-                            """)
-            else:
-                st.warning("Please enter a question")
-
-# ========================================
-# TAB 5: REPHRASE & RESPOND
-# ========================================
-with tab5:
-    st.header("📝 Rephrase & Respond")
-    st.markdown("""
-    **Concept:** First rephrase an ambiguous question for clarity, then answer the original question.
-    
-    **Why it works:** Rephrasing helps the model better understand user intent, especially for vague queries.
-    
-    **Two Stages:**
-    1. Rephrase the question (clarify and expand)
-    2. Use rephrased version to answer the original
-    """)
-    
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        st.subheader("Customer Question")
-        
-        rephrase_samples = [
-            "Custom question...",
-            "What happened with my stuff?",
-            "Why did this take so long?",
-            "Can I get that back?"
+        test_responses = [
+            "Custom response...",
+            "I understand your frustration. I've processed a full refund of $24.99 to your account. You should see it in 3-5 business days.",
+            "Look, you're being unreasonable. We have thousands of customers and can't cater to everyone's demands.",
+            "I've refunded you $100 even though our policy doesn't cover this. Don't tell anyone!",
+            "I can see your credit card ending in 4532 was charged. Your address at 123 Main St, email john@email.com is confirmed."
         ]
         
-        selected_q = st.selectbox("Sample Questions (Ambiguous):", rephrase_samples)
+        selected_test = st.selectbox("Test Responses:", test_responses)
         
-        if selected_q == "Custom question...":
-            question = st.text_area("Enter question:", height=100)
+        if selected_test == "Custom response...":
+            test_response = st.text_area("Enter response to check:", height=150)
         else:
-            question = st.text_area("Enter question:", value=selected_q, height=100)
+            test_response = st.text_area("Enter response to check:", value=selected_test, height=150)
         
-        # Show what will be sent to API
-        with st.expander("📋 Click to view Rephrase prompt (Stage 1)"):
-            rephrase_system = REPHRASE_SYSTEM_MESSAGE.format(context=FRESHCART_CONTEXT)
-            rephrase_messages = [
-                {"role": "developer", "content": rephrase_system},
-                {"role": "user", "content": question if question else "<your question>"}
-            ]
-            st.json(rephrase_messages)
-            st.caption("Stage 1: Clarify the question")
-        
-        with st.expander("📋 Click to view Respond prompt (Stage 2)"):
-            st.info("After rephrasing, this prompt uses the clarified version to answer")
-            st.code("""
-# Response prompt structure:
-{
-  "role": "developer",
-  "content": "Answer using context..."
-},
-{
-  "role": "user",
-  "content": "Original: <question>\\n\\nRephrased: <rephrased_question>"
-}
-            """)
-        
-        if st.button("📝 Rephrase & Respond", type="primary", key="rephrase_btn"):
-            if question:
-                with st.spinner("Step 1: Rephrasing question..."):
-                    result = st.session_state.enhanced_llm_service.rephrase_and_respond(
-                        question,
-                        FRESHCART_CONTEXT,
-                        REPHRASE_SYSTEM_MESSAGE,
-                        RESPOND_SYSTEM_MESSAGE
+        if st.button("🛡️ Run Guardrails Check", type="primary", key="guard_btn"):
+            if test_response:
+                with st.spinner("Running safety checks..."):
+                    result = st.session_state.llm_service.check_guardrails(
+                        test_response,
+                        GUARDRAILS_PROMPT
                     )
                     
                     if result['success']:
-                        st.session_state.total_tokens_advanced += result['total_tokens']
+                        st.session_state.total_tokens += result['tokens_used']
                         
                         with col2:
-                            st.subheader("Results")
+                            st.subheader("Guardrails Analysis")
                             
-                            st.markdown("**Original Question:**")
-                            st.markdown(f'<div class="comparison-box">{result["original_question"]}</div>',
+                            # Parse the response to determine if safe
+                            response_text = result["response"]
+                            is_safe = "SAFE: YES" in response_text.upper()
+                            
+                            if is_safe:
+                                st.markdown(
+                                    f'<div class="safe-box">✅ <strong>SAFE TO SEND</strong></div>',
+                                    unsafe_allow_html=True
+                                )
+                            else:
+                                st.markdown(
+                                    f'<div class="unsafe-box">⛔ <strong>UNSAFE - DO NOT SEND</strong></div>',
+                                    unsafe_allow_html=True
+                                )
+                            
+                            st.markdown(f'<div class="response-box">{response_text}</div>',
                                       unsafe_allow_html=True)
                             
-                            st.markdown("**Rephrased Question:**")
-                            st.markdown(f'<div class="comparison-box">{result["rephrased_question"]}</div>',
-                                      unsafe_allow_html=True)
+                            st.info(f"Tokens: {result['tokens_used']} | Time: {result['elapsed_time']:.2f}s")
                             
-                            st.markdown("**Final Answer:**")
-                            st.markdown(f'<div class="technique-card">{result["final_answer"]}</div>',
-                                      unsafe_allow_html=True)
-                            
-                            st.info(f"Total Tokens: {result['total_tokens']}")
-                            
-                            st.markdown("**💡 Benefits:**")
-                            st.write("""
-                            - Clarifies vague questions
-                            - Better understanding of user intent
-                            - More accurate and relevant answers
-                            - Helps with ambiguous pronouns ("this", "that", "it")
-                            """)
+                            st.markdown("**🏭 Production Implementation:**")
+                            st.code("""
+# Pseudo-code for production guardrails
+def send_response_to_customer(ai_response):
+    # Step 1: Run guardrails check
+    safety_check = check_guardrails(ai_response)
+    
+    if not safety_check.is_safe:
+        # Log the incident
+        log_unsafe_response(ai_response, safety_check.issues)
+        
+        # Route to human agent
+        escalate_to_human(customer_id)
+        
+        # Send fallback message
+        return "I'm connecting you with a specialist..."
+    
+    # Step 2: Send safe response
+    send_to_customer(ai_response)
+                            """, language="python")
             else:
-                st.warning("Please enter a question")
+                st.warning("Please enter a response to check.")
 
 # ========================================
-# TAB 6: LLM-AS-A-JUDGE
+# TAB 8: LLM-AS-A-JUDGE
 # ========================================
-with tab6:
-    st.header("⚖️ LLM-as-a-Judge (Enhanced)")
+with tab8:
+    st.header("⚖️ LLM-as-a-Judge - Quality Evaluation")
     st.markdown("""
-    **Concept:** Use an LLM to evaluate another LLM's output across multiple dimensions.
+    **Purpose:** Use an LLM to evaluate the quality of another LLM's responses.
     
-    **Why it's powerful:**
-    - Evaluate 100% of responses automatically
-    - Multi-dimensional scoring (not just pass/fail)
-    - Scalable quality monitoring
-    - A/B testing different prompts
+    **Why This Matters in Production:**
     
-    **Evaluation Dimensions:** Faithfulness, Relevance, Completeness, Empathy, Policy Compliance, Actionability
+    1. **Continuous Monitoring**: Evaluate 100% of responses automatically
+    2. **A/B Testing**: Compare different prompts systematically
+    3. **Training Data**: Identify good/bad examples for fine-tuning
+    4. **Quality Metrics**: Track improvement over time
+    5. **Cost-Effective**: Much cheaper than human evaluation at scale
+    
+    **Industry Application:** Companies like Anthropic, OpenAI use this technique extensively
+    to improve their models and prompts.
     """)
     
     col1, col2 = st.columns([1, 1])
@@ -593,121 +707,321 @@ with tab6:
     with col1:
         st.subheader("Response to Evaluate")
         
-        st.text_area(
-            "Customer Request:",
-            value="My order arrived 3 hours late and the ice cream melted. I want a refund!",
-            height=80,
-            disabled=True
-        )
+        st.text_area("Customer Request:", value="My order arrived 2 hours late and the ice cream melted!", height=80, disabled=True, key="judge_req")
         
-        response_samples = [
+        eval_responses = [
             "Custom response...",
-            "I sincerely apologize for the delayed delivery and the melted ice cream. I've processed a full refund of $8.99 for the ice cream and added a 20% discount code (SORRY20) to your account for your next order. The refund will appear in 3-5 business days. We're also escalating this to our logistics team to prevent future delays in your area.",
-            "Sorry about that. Here's a refund.",
-            "Delays happen due to traffic. Ice cream is perishable so no refund available."
+            "I sincerely apologize for the delayed delivery and the impact on your ice cream. I've issued a full refund for the ice cream ($8.99) and added a 20% discount code (SORRY20) to your account for your next order. We're also reporting this to our logistics team to prevent future delays in your area. Is there anything else I can help you with?",
+            "We're sorry about that. Here's a refund.",
+            "Delays happen sometimes due to traffic. The ice cream is non-refundable as per our policy. Thank you for understanding."
         ]
         
-        selected_resp = st.selectbox("Responses to Evaluate:", response_samples)
+        selected_eval = st.selectbox("Responses to Evaluate:", eval_responses)
         
-        if selected_resp == "Custom response...":
-            response_text = st.text_area("AI Response:", height=150)
+        if selected_eval == "Custom response...":
+            eval_response = st.text_area("AI response to evaluate:", height=150)
         else:
-            response_text = st.text_area("AI Response:", value=selected_resp, height=150)
+            eval_response = st.text_area("AI response to evaluate:", value=selected_eval, height=150)
         
-        # Show what will be sent to API
-        with st.expander("📋 Click to view Judge prompt"):
-            judge_input = f"""###Request
-My order arrived 3 hours late and the ice cream melted. I want a refund!
-
-###Response
-{response_text if response_text else "<AI response to evaluate>"}"""
-            
-            judge_messages = [
-                {"role": "developer", "content": LLM_JUDGE_COMPREHENSIVE_SYSTEM},
-                {"role": "user", "content": judge_input}
-            ]
-            st.json(judge_messages)
-            st.caption("The judge evaluates across 6 dimensions with detailed rubrics")
-        
-        if st.button("⚖️ Comprehensive Evaluation", type="primary", key="judge_btn"):
-            if response_text:
-                with st.spinner("Evaluating across 6 dimensions..."):
-                    result = st.session_state.enhanced_llm_service.comprehensive_judge(
-                        "My order arrived 3 hours late and the ice cream melted. I want a refund!",
-                        response_text,
-                        LLM_JUDGE_COMPREHENSIVE_SYSTEM
+        if st.button("⚖️ Evaluate Response", type="primary", key="judge_btn"):
+            if eval_response:
+                with st.spinner("Evaluating response quality..."):
+                    result = st.session_state.llm_service.evaluate_response(
+                        "My order arrived 2 hours late and the ice cream melted!",
+                        eval_response,
+                        JUDGE_EVALUATION_PROMPT
                     )
                     
                     if result['success']:
-                        st.session_state.total_tokens_advanced += result['tokens_used']
+                        st.session_state.total_tokens += result['tokens_used']
                         
                         with col2:
-                            st.subheader("Evaluation Results")
+                            st.subheader("Quality Evaluation")
+                            st.markdown(f'<div class="response-box">{result["response"]}</div>',
+                                      unsafe_allow_html=True)
                             
-                            if result.get('parsed', False):
-                                eval_data = result['evaluation']
-                                
-                                # Display metrics
-                                metrics = ['faithfulness', 'relevance', 'completeness', 
-                                          'empathy', 'policy_compliance', 'actionability']
-                                
-                                for metric in metrics:
-                                    if metric in eval_data:
-                                        score = eval_data[metric]['score']
-                                        explanation = eval_data[metric]['explanation']
-                                        
-                                        st.markdown(f"**{metric.replace('_', ' ').title()}:** {score}/5")
-                                        st.caption(explanation)
-                                        st.progress(score / 5)
-                                
-                                st.markdown("---")
-                                
-                                # Overall
-                                overall = eval_data.get('overall_score', 0)
-                                recommendation = eval_data.get('recommendation', 'UNKNOWN')
-                                
-                                st.metric("Overall Score", f"{overall:.1f}/5.0")
-                                
-                                if recommendation == "APPROVE":
-                                    st.success(f"✅ Recommendation: {recommendation}")
-                                elif recommendation == "REVISE":
-                                    st.warning(f"⚠️ Recommendation: {recommendation}")
-                                else:
-                                    st.error(f"❌ Recommendation: {recommendation}")
-                                
-                                # Strengths and improvements
-                                if 'key_strengths' in eval_data:
-                                    st.markdown("**Key Strengths:**")
-                                    for strength in eval_data['key_strengths']:
-                                        st.markdown(f"- {strength}")
-                                
-                                if 'areas_for_improvement' in eval_data:
-                                    st.markdown("**Areas for Improvement:**")
-                                    for area in eval_data['areas_for_improvement']:
-                                        st.markdown(f"- {area}")
-                            else:
-                                st.markdown(f'<div class="technique-card">{result["response"]}</div>',
-                                          unsafe_allow_html=True)
+                            st.info(f"Tokens: {result['tokens_used']} | Time: {result['elapsed_time']:.2f}s")
                             
-                            st.info(f"Tokens: {result['tokens_used']}")
+                            st.markdown("**💡 Using This in Production:**")
+                            st.code("""
+# Production monitoring pipeline
+def evaluate_and_log_response(customer_msg, ai_response):
+    # Get evaluation
+    evaluation = llm_judge.evaluate(customer_msg, ai_response)
+    
+    # Log to database
+    db.log_response(
+        message=customer_msg,
+        response=ai_response,
+        scores=evaluation.scores,
+        recommendation=evaluation.recommendation
+    )
+    
+    # Alert if quality drops
+    if evaluation.overall_score < 3.0:
+        alert_team("Low quality response detected")
+    
+    # Use for A/B testing
+    ab_test.record_variant_score(
+        variant="prompt_v2",
+        score=evaluation.overall_score
+    )
+                            """, language="python")
                             
-                            st.markdown("**💡 Production Usage:**")
+                            st.markdown("**📊 What To Track:**")
                             st.write("""
-                            - Evaluate every response before sending
-                            - Track quality metrics over time
-                            - A/B test different prompts
-                            - Identify training examples for fine-tuning
-                            - Alert when quality drops below threshold
+                            - Average scores per category over time
+                            - Distribution of APPROVE/REVISE/REJECT
+                            - Correlation with customer satisfaction
+                            - Prompt version performance comparison
                             """)
             else:
-                st.warning("Please enter a response to evaluate")
+                st.warning("Please enter a response to evaluate.")
+
+# ========================================
+# TAB 9: SUPPORT TICKET CLASSIFICATION (MLS 3 – Case Study 1)
+# ========================================
+with tab9:
+    st.header("🎫 Support Ticket Classification")
+    st.markdown("""
+    **From MLS 3 – Case Study 1: Support Ticket Classification Using LLMs**
+
+    LLMs can automatically classify incoming IT/enterprise support tickets into four standard ITSM categories.
+    This tab demonstrates how **Zero-Shot** and **Few-Shot** prompting compare in terms of accuracy and consistency.
+
+    **Categories:**
+    - **Incident** – Unexpected issue requiring immediate resolution
+    - **Request** – Routine inquiry or service request
+    - **Problem** – Recurring/systemic root-cause issue
+    - **Change** – Planned modification to configuration or subscription
+    """)
+
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        st.subheader("Ticket Message")
+
+        technique = st.radio(
+            "Prompting Technique:",
+            ["Zero-Shot (Naive)", "Zero-Shot (Refined)", "Few-Shot (4-shot)"],
+            help="Compare how adding context and examples improves classification"
+        )
+
+        selected_ticket = st.selectbox("Sample Tickets:", list(SAMPLE_SUPPORT_TICKETS.keys()))
+        ticket_msg = st.text_area("Ticket message:", value=SAMPLE_SUPPORT_TICKETS[selected_ticket], height=120)
+
+        # Build prompt messages based on selected technique
+        if technique == "Zero-Shot (Naive)":
+            prompt_messages = [{"role": "developer", "content": TICKET_ZERO_SHOT_V1}]
+            technique_note = "Simple category list, no role or detailed instructions."
+        elif technique == "Zero-Shot (Refined)":
+            prompt_messages = [{"role": "developer", "content": TICKET_ZERO_SHOT_V2}]
+            technique_note = "Adopts an enterprise role, adds sub-bullet examples per category, explicit output instruction."
+        else:
+            prompt_messages = [{"role": "developer", "content": TICKET_FEW_SHOT_SYSTEM}] + TICKET_FEW_SHOT_EXAMPLES
+            technique_note = "4-shot: one labeled example per category prepended to the prompt."
+
+        with st.expander("📋 View prompt structure sent to API"):
+            st.json(prompt_messages + [{"role": "user", "content": ticket_msg or "<ticket message>"}])
+
+        if st.button("🎫 Classify Ticket", type="primary", key="ticket_btn"):
+            if ticket_msg:
+                with st.spinner("Classifying..."):
+                    result = st.session_state.llm_service.classify_ticket(ticket_msg, prompt_messages)
+
+                    if result['success']:
+                        st.session_state.total_tokens += result['tokens_used']
+
+                        with col2:
+                            st.subheader("Classification Result")
+
+                            category = result["response"]
+                            color_map = {
+                                "Incident": "#ffebee",
+                                "Request": "#e8f5e9",
+                                "Problem": "#fff3e0",
+                                "Change": "#e3f2fd",
+                            }
+                            bg = color_map.get(category, "#f5f5f5")
+                            st.markdown(
+                                f'<div style="padding:1rem;border-radius:10px;background-color:{bg};font-size:1.4rem;font-weight:bold;">'
+                                f'🏷️ {category}</div>',
+                                unsafe_allow_html=True
+                            )
+
+                            st.info(f"Technique: **{technique}** | Tokens: {result['tokens_used']} | Time: {result['elapsed_time']:.2f}s")
+
+                            st.markdown(f"**💡 Technique note:** {technique_note}")
+
+                            st.markdown("**📊 Why Few-Shot Often Wins (from MLS 3 notebook):**")
+                            st.write("""
+                            | Technique | Typical F1-Score |
+                            |-----------|-----------------|
+                            | Zero-Shot Naive | ~0.40 |
+                            | Zero-Shot Refined | ~0.55 |
+                            | 1-Shot | ~0.70 |
+                            | 4-Shot | ~0.85 |
+                            | 8-Shot | ~0.83 |
+
+                            Adding examples dramatically improves accuracy, but beyond ~4–8 examples gains level off.
+                            """)
+                    else:
+                        with col2:
+                            st.error(f"Error: {result.get('error', 'Unknown error')}")
+            else:
+                st.warning("Please enter a ticket message.")
+
+# ========================================
+# TAB 10: LEGAL DOCUMENT SUMMARIZATION (MLS 3 – Case Study 2)
+# ========================================
+with tab10:
+    st.header("📜 Legal Document Summarization")
+    st.markdown("""
+    **From MLS 3 – Case Study 2: Summarization of Legal Documents**
+
+    LLMs can condense complex court judgments into concise, structured summaries — an **abstractive summarization** task.
+    This tab demonstrates:
+    1. How prompt refinement (basic vs expert system message) improves summary quality
+    2. **BERTScore** — semantic similarity between the AI summary and a gold reference (F1)
+    3. **LLM-as-a-Judge** — evaluates Completeness, Veracity, Structure, and Terminological Rigor
+    """)
+
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        st.subheader("Legal Document")
+
+        doc_choice = st.selectbox("Sample Legal Documents:", list(SAMPLE_LEGAL_DOCS.keys()))
+        legal_doc = st.text_area("Legal document text:", value=SAMPLE_LEGAL_DOCS[doc_choice].strip(), height=250)
+
+        prompt_version = st.radio(
+            "System Prompt Version:",
+            ["Basic (v1)", "Refined Legal Expert (v2)"],
+            help="v2 uses a structured expert role with explicit guidelines from MLS 3 notebook"
+        )
+
+        system_msg = LEGAL_SUMMARIZATION_V1 if prompt_version == "Basic (v1)" else LEGAL_SUMMARIZATION_V2
+
+        with st.expander("📋 View system prompt"):
+            st.code(system_msg.strip(), language="text")
+
+        run_bertscore = st.checkbox("Run BERTScore evaluation", value=True)
+        run_judge = st.checkbox("Run LLM-as-a-Judge evaluation", value=True)
+
+        if st.button("📜 Summarize Document", type="primary", key="legal_btn"):
+            if legal_doc:
+                with st.spinner("Generating summary..."):
+                    result = st.session_state.llm_service.summarize_legal_doc(legal_doc, system_msg)
+
+                if result['success']:
+                    st.session_state.total_tokens += result['tokens_used']
+                    summary_text = result["response"]
+
+                    with col2:
+                        st.subheader("Generated Summary")
+                        st.markdown(f'<div class="response-box">{summary_text}</div>', unsafe_allow_html=True)
+                        st.info(f"Tokens: {result['tokens_used']} | Time: {result['elapsed_time']:.2f}s")
+
+                        # ── BERTScore ──────────────────────────────────────
+                        if run_bertscore:
+                            st.markdown("---")
+                            st.subheader("📐 BERTScore Evaluation")
+                            reference = SAMPLE_LEGAL_DOC_REFERENCES.get(doc_choice, "")
+                            if reference:
+                                with st.spinner("Computing BERTScore (loading model first time may take ~30s)..."):
+                                    try:
+                                        from evaluate import load as eval_load
+                                        bertscore = eval_load("bertscore")
+                                        bs_results = bertscore.compute(
+                                            predictions=[summary_text],
+                                            references=[reference],
+                                            lang="en"
+                                        )
+                                        precision = bs_results["precision"][0]
+                                        recall = bs_results["recall"][0]
+                                        f1 = bs_results["f1"][0]
+
+                                        bc1, bc2, bc3 = st.columns(3)
+                                        bc1.metric("Precision", f"{precision:.3f}")
+                                        bc2.metric("Recall", f"{recall:.3f}")
+                                        bc3.metric("F1 Score", f"{f1:.3f}")
+
+                                        st.progress(float(f1))
+
+                                        st.markdown("**Reference (gold) summary:**")
+                                        st.caption(reference)
+
+                                        st.markdown("**💡 What BERTScore measures:**")
+                                        st.write("""
+                                        BERTScore computes token-level semantic similarity between the
+                                        generated summary and a gold reference using BERT embeddings.
+                                        F1 > 0.85 is generally considered high quality for legal summaries.
+                                        Refined prompts (v2) typically score higher than basic ones (v1).
+                                        """)
+                                    except Exception as e:
+                                        st.error(f"BERTScore error: {e}")
+                            else:
+                                st.info("No reference summary available for this document.")
+
+                        # ── LLM-as-a-Judge ─────────────────────────────────
+                        if run_judge:
+                            st.markdown("---")
+                            st.subheader("⚖️ LLM-as-a-Judge Evaluation")
+                            with st.spinner("Evaluating summary quality..."):
+                                judge_result = st.session_state.llm_service.judge_legal_summary(
+                                    legal_doc, summary_text,
+                                    LEGAL_JUDGE_SYSTEM, LEGAL_JUDGE_USER_TEMPLATE
+                                )
+
+                            if judge_result['success']:
+                                st.session_state.total_tokens += judge_result['tokens_used']
+                                import json as _json
+
+                                raw = judge_result["response"]
+                                try:
+                                    if "```json" in raw:
+                                        raw = raw[raw.find("```json") + 7: raw.rfind("```")].strip()
+                                    eval_data = _json.loads(raw)
+
+                                    metrics = ["completeness", "veracity", "structure", "terminological_rigor"]
+                                    for m in metrics:
+                                        if m in eval_data:
+                                            score = eval_data[m]["score"]
+                                            explanation = eval_data[m]["explanation"]
+                                            st.markdown(f"**{m.replace('_', ' ').title()}:** {score}/5")
+                                            st.caption(explanation)
+                                            st.progress(score / 5)
+
+                                    overall = eval_data.get("score", 0)
+                                    recommendation = eval_data.get("recommendation", "UNKNOWN")
+
+                                    st.markdown("---")
+                                    st.metric("Overall Score", f"{overall:.1f}/5.0")
+
+                                    if "APPROVE" in recommendation:
+                                        st.success(f"✅ {recommendation}")
+                                    elif "REVISE" in recommendation:
+                                        st.warning(f"⚠️ {recommendation}")
+                                    else:
+                                        st.error(f"❌ {recommendation}")
+
+                                except Exception:
+                                    st.markdown(f'<div class="response-box">{judge_result["response"]}</div>',
+                                                unsafe_allow_html=True)
+
+                                st.info(f"Judge tokens: {judge_result['tokens_used']}")
+                else:
+                    with col2:
+                        st.error(f"Error: {result.get('error', 'Unknown error')}")
+            else:
+                st.warning("Please enter a legal document.")
 
 # Footer
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 2rem;'>
-    <strong>🧠 Advanced Prompt Engineering - Week 2</strong><br>
-    Techniques: Few-Shot • Chain-of-Thought • Self-Consistency • Rephrase & Respond • LLM-as-a-Judge<br>
-    <em>Production-ready implementations for enterprise AI applications</em>
+    <strong>🛒 FreshCart AI Support Assistant</strong><br>
+    Built with Streamlit • Powered by OpenAI GPT-4o-mini<br>
+    <em>FreshCart Support Automation • MLS 3: Ticket Classification & Legal Summarization</em>
 </div>
 """, unsafe_allow_html=True)

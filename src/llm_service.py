@@ -174,6 +174,82 @@ class LLMService:
         )
         return self.generate_response(prompt, temperature=0.2, max_tokens=600)
     
+    def classify_ticket(self, ticket_message: str, prompt_messages: list) -> Dict:
+        """Classify a support ticket using a pre-built messages array (zero-shot or few-shot)."""
+        self.call_count += 1
+        start_time = time.time()
+        try:
+            messages = prompt_messages + [{"role": "user", "content": ticket_message}]
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.0,
+                max_tokens=20
+            )
+            elapsed_time = time.time() - start_time
+            return {
+                "success": True,
+                "response": response.choices[0].message.content.strip(),
+                "model": self.model,
+                "tokens_used": response.usage.total_tokens,
+                "elapsed_time": elapsed_time,
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def summarize_legal_doc(self, doc_text: str, system_message: str, few_shot_examples: list = None) -> Dict:
+        """Summarize a legal document using few-shot prompting."""
+        self.call_count += 1
+        start_time = time.time()
+        try:
+            messages = [{"role": "developer", "content": system_message}]
+            if few_shot_examples:
+                messages.extend(few_shot_examples)
+            messages.append({"role": "user", "content": doc_text})
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=300
+            )
+            elapsed_time = time.time() - start_time
+            return {
+                "success": True,
+                "response": response.choices[0].message.content.strip(),
+                "model": self.model,
+                "tokens_used": response.usage.total_tokens,
+                "elapsed_time": elapsed_time,
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def judge_legal_summary(self, legal_doc: str, summary: str, judge_system: str, user_template: str) -> Dict:
+        """Use LLM-as-a-Judge to evaluate a legal document summary."""
+        self.call_count += 1
+        start_time = time.time()
+        try:
+            user_content = user_template.format(legal_doc=legal_doc, summary=summary)
+            messages = [
+                {"role": "developer", "content": judge_system},
+                {"role": "user", "content": user_content},
+            ]
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.0,
+                max_tokens=600
+            )
+            elapsed_time = time.time() - start_time
+            return {
+                "success": True,
+                "response": response.choices[0].message.content.strip(),
+                "model": self.model,
+                "tokens_used": response.usage.total_tokens,
+                "elapsed_time": elapsed_time,
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def get_stats(self) -> Dict:
         """Get usage statistics"""
         return {

@@ -2,3 +2,6 @@ streamlit
 openai
 python-dotenv
 pandas
+datasets==3.3.2
+evaluate==0.4.3
+bert-score==0.3.13
